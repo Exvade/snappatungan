@@ -86,26 +86,11 @@ export default function Home() {
   const toggleAssignment = (itemIndex: number, person: string) => {
     setAssignments((prev) => {
       const itemAssignments = { ...(prev[itemIndex] || {}) };
-      const itemQty = result?.items[itemIndex].qty || 1;
 
       if (itemAssignments[person]) {
         delete itemAssignments[person];
       } else {
-        // Hitung total porsi (qty) yang sudah diambil semua orang saat ini
-        const currentTotal = Object.values(itemAssignments).reduce(
-          (a, b) => a + b,
-          0
-        );
-
-        // HYBRID LOGIC: Cek jika mencoba menambah orang tapi jatah Qty sudah habis
-        if (itemQty > 1 && currentTotal >= itemQty) {
-          alert(
-            `Jatah menu ini sudah habis (Maksimal ${itemQty})! Kurangi porsi orang lain dulu.`
-          );
-          return prev;
-        }
-
-        itemAssignments[person] = 1;
+        itemAssignments[person] = 1; // Default bobot awal = 1
       }
       return { ...prev, [itemIndex]: itemAssignments };
     });
@@ -117,17 +102,7 @@ export default function Home() {
       const currentQty = itemAssignments[person] || 0;
       const newQty = currentQty + delta;
 
-      const itemQty = result?.items[itemIndex].qty || 1;
-      const currentTotal = Object.values(itemAssignments).reduce(
-        (a, b) => a + b,
-        0
-      );
-
-      // HYBRID LOGIC: Blokir tombol + jika jatah Qty sudah mentok (khusus untuk item > 1)
-      if (delta > 0 && itemQty > 1 && currentTotal + 1 > itemQty) {
-        return prev; // Silent block, state tidak berubah
-      }
-
+      // Pembatasan dihapus sepenuhnya. Bebas berapapun!
       if (newQty <= 0) {
         delete itemAssignments[person];
       } else {
@@ -342,57 +317,43 @@ export default function Home() {
                           {hasAssignees && (
                             <div className="bg-[#F5D6BA]/30 p-3 rounded-xl mt-1 space-y-2 border border-[#F5D6BA]">
                               <p className="text-xs font-semibold text-[#2C2C54]/60 mb-2">
-                                Tentukan Porsi/Qty:
+                                Atur Rasio/Bobot Patungan:
                               </p>
                               {Object.entries(itemAssigns).map(
-                                ([person, qty]) => {
-                                  // Cek apakah total semua porsi sudah menyentuh batas Qty struk
-                                  const currentTotal = Object.values(
-                                    itemAssigns
-                                  ).reduce((a, b) => a + b, 0);
-                                  const isMaxReached =
-                                    item.qty > 1 && currentTotal >= item.qty;
+                                ([person, qty]) => (
+                                  <div
+                                    key={person}
+                                    className="flex justify-between items-center bg-white px-3 py-2 rounded-lg shadow-sm"
+                                  >
+                                    <span className="text-sm font-bold text-[#2C2C54]">
+                                      {person}
+                                    </span>
+                                    <div className="flex items-center gap-3">
+                                      <button
+                                        onClick={() =>
+                                          updatePortion(index, person, -1)
+                                        }
+                                        className="w-7 h-7 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center font-bold text-[#2C2C54] transition-colors"
+                                      >
+                                        -
+                                      </button>
 
-                                  return (
-                                    <div
-                                      key={person}
-                                      className="flex justify-between items-center bg-white px-3 py-2 rounded-lg shadow-sm"
-                                    >
-                                      <span className="text-sm font-bold text-[#2C2C54]">
-                                        {person}
+                                      <span className="text-sm font-extrabold w-4 text-center">
+                                        {qty}
                                       </span>
-                                      <div className="flex items-center gap-3">
-                                        <button
-                                          onClick={() =>
-                                            updatePortion(index, person, -1)
-                                          }
-                                          className="w-7 h-7 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center font-bold text-[#2C2C54] transition-colors"
-                                        >
-                                          -
-                                        </button>
-                                        <span className="text-sm font-extrabold w-4 text-center">
-                                          {qty}
-                                        </span>
 
-                                        {/* Tombol Plus menjadi mati (disabled) jika batas tercapai */}
-                                        <button
-                                          onClick={() =>
-                                            updatePortion(index, person, 1)
-                                          }
-                                          disabled={isMaxReached}
-                                          className={`w-7 h-7 rounded-full flex items-center justify-center font-bold transition-colors
-                                          ${
-                                            isMaxReached
-                                              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                                              : "bg-[#2C2C54] text-white hover:bg-[#2C2C54]/80"
-                                          }`}
-                                        >
-                                          +
-                                        </button>
-                                      </div>
+                                      {/* Tombol Plus kembali normal, tidak ada blokir */}
+                                      <button
+                                        onClick={() =>
+                                          updatePortion(index, person, 1)
+                                        }
+                                        className="w-7 h-7 bg-[#2C2C54] text-white hover:bg-[#2C2C54]/80 rounded-full flex items-center justify-center font-bold transition-colors"
+                                      >
+                                        +
+                                      </button>
                                     </div>
-                                  );
-                                }
+                                  </div>
+                                )
                               )}
                             </div>
                           )}
