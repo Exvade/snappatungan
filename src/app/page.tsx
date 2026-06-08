@@ -27,49 +27,82 @@ export default function Home() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
 
+    // Reset nilai input agar bisa dipakai berulang kali tanpa error
+    e.target.value = "";
+
+    if (!file) {
+      alert("Gagal membaca file dari kamera/galeri.");
+      return;
+    }
+
+    // Ubah UI menjadi status loading SEGERA setelah foto diambil
     setLoading(true);
     setResult(null);
     setParticipants([]);
     setAssignments({});
     setFinalBills(null);
 
-    const img = new Image();
-    img.src = URL.createObjectURL(file);
-    img.onload = async () => {
-      const canvas = document.createElement("canvas");
-      const MAX_WIDTH = 800;
-      let width = img.width;
-      let height = img.height;
+    try {
+      const img = new Image();
+      // Gunakan URL sementara untuk file gambar
+      const objectUrl = URL.createObjectURL(file);
+      img.src = objectUrl;
 
-      if (width > MAX_WIDTH) {
-        height = Math.round((height * MAX_WIDTH) / width);
-        width = MAX_WIDTH;
-      }
+      img.onload = async () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 800; // Kompresi ukuran
+          let width = img.width;
+          let height = img.height;
 
-      canvas.width = width;
-      canvas.height = height;
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
 
-      const ctx = canvas.getContext("2d");
-      ctx?.drawImage(img, 0, 0, width, height);
-      const base64String = canvas.toDataURL("image/jpeg", 0.7).split(",")[1];
+          canvas.width = width;
+          canvas.height = height;
 
-      try {
-        const response = await fetch("/api/extract", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: base64String }),
-        });
-        const data = await response.json();
-        setResult(data);
-      } catch (error) {
-        console.error("Error:", error);
-        alert("Gagal mengekstrak struk");
-      } finally {
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          // Konversi ke base64 (Kualitas 70% agar ringan dikirim via WiFi lokal)
+          const base64String = canvas
+            .toDataURL("image/jpeg", 0.7)
+            .split(",")[1];
+
+          // Bersihkan memory browser HP
+          URL.revokeObjectURL(objectUrl);
+
+          const response = await fetch("/api/extract", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageBase64: base64String }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+          }
+
+          const data = await response.json();
+          setResult(data);
+        } catch (error) {
+          console.error("Error Processing:", error);
+          alert("Gagal memproses gambar. Pastikan koneksi WiFi stabil.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      img.onerror = () => {
+        alert("File yang dimasukkan bukan gambar yang valid atau rusak.");
         setLoading(false);
-      }
-    };
+      };
+    } catch (error) {
+      alert("Browser gagal memuat kamera/gambar.");
+      setLoading(false);
+    }
   };
 
   const addParticipant = () => {
@@ -205,41 +238,79 @@ export default function Home() {
         {!result && (
           <div className="bg-zinc-50 p-6 shadow-md rounded-sm border border-zinc-300 relative overflow-hidden">
             {!loading ? (
-              <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-zinc-400 hover:border-zinc-800 hover:bg-zinc-100 cursor-pointer transition-colors group">
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                  <svg
-                    className="w-10 h-10 text-zinc-400 group-hover:text-zinc-800 mb-3 transition-colors"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                    ></path>
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-                    ></path>
-                  </svg>
-                  <p className="text-sm font-semibold uppercase tracking-wider text-zinc-600 group-hover:text-zinc-900">
-                    Upload Struk
+              <div className="space-y-5">
+                <div className="text-center border-b border-dashed border-zinc-300 pb-4">
+                  <p className="text-sm font-bold uppercase tracking-wider text-zinc-600">
+                    &gt;&gt; SELECT INPUT METHOD
                   </p>
                 </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-              </label>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* TOMBOL KAMERA */}
+                  <label className="flex flex-col items-center justify-center h-32 border-2 border-zinc-800 bg-zinc-200 hover:bg-zinc-300 cursor-pointer transition-all shadow-[4px_4px_0px_#27272a] active:shadow-none active:translate-x-[4px] active:translate-y-[4px]">
+                    <svg
+                      className="w-8 h-8 text-zinc-800 mb-2"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="square"
+                        strokeLinejoin="miter"
+                        d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                      ></path>
+                      <circle
+                        cx="12"
+                        cy="13"
+                        r="3"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      ></circle>
+                    </svg>
+                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-900">
+                      CAMERA
+                    </p>
+                    {/* Trik Utama: capture="environment" untuk buka kamera belakang */}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {/* TOMBOL GALERI */}
+                  <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-zinc-400 hover:border-zinc-800 hover:bg-zinc-100 cursor-pointer transition-colors">
+                    <svg
+                      className="w-8 h-8 text-zinc-500 mb-2"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="square"
+                        strokeLinejoin="miter"
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      ></path>
+                    </svg>
+                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-600">
+                      GALLERY
+                    </p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-10 space-y-4">
                 <div className="w-20 h-24 border border-zinc-300 bg-white shadow-inner flex flex-col items-center p-2 overflow-hidden relative">
-                  {/* Animasi Kertas Keluar */}
                   <div className="w-full h-full bg-zinc-100 absolute top-0 flex flex-col gap-1 p-2 animate-print">
                     <div className="w-full h-1 bg-zinc-300"></div>
                     <div className="w-3/4 h-1 bg-zinc-300"></div>
