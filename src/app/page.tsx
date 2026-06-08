@@ -17,13 +17,9 @@ export default function Home() {
 
   const [participants, setParticipants] = useState<string[]>([]);
   const [newParticipant, setNewParticipant] = useState("");
-
-  // PERUBAHAN 1: State sekarang menyimpan jumlah porsi tiap orang per item
-  // Contoh: { 0: { "Deft": 2, "Budi": 1 } } -> Item index 0, Deft ambil 2, Budi ambil 1
   const [assignments, setAssignments] = useState<
     Record<number, Record<string, number>>
   >({});
-
   const [finalBills, setFinalBills] = useState<Record<
     string,
     { subtotal: number; extra: number; total: number }
@@ -86,11 +82,10 @@ export default function Home() {
   const toggleAssignment = (itemIndex: number, person: string) => {
     setAssignments((prev) => {
       const itemAssignments = { ...(prev[itemIndex] || {}) };
-
       if (itemAssignments[person]) {
         delete itemAssignments[person];
       } else {
-        itemAssignments[person] = 1; // Default bobot awal = 1
+        itemAssignments[person] = 1;
       }
       return { ...prev, [itemIndex]: itemAssignments };
     });
@@ -102,7 +97,6 @@ export default function Home() {
       const currentQty = itemAssignments[person] || 0;
       const newQty = currentQty + delta;
 
-      // Pembatasan dihapus sepenuhnya. Bebas berapapun!
       if (newQty <= 0) {
         delete itemAssignments[person];
       } else {
@@ -112,7 +106,6 @@ export default function Home() {
     });
   };
 
-  // PERUBAHAN 4: Kalkulasi berdasarkan rasio porsi
   const calculateSplit = () => {
     if (!result) return;
 
@@ -120,6 +113,7 @@ export default function Home() {
       string,
       { subtotal: number; extra: number; total: number }
     > = {};
+
     participants.forEach((p) => {
       bills[p] = { subtotal: 0, extra: 0, total: 0 };
     });
@@ -129,15 +123,12 @@ export default function Home() {
       const assignedPeople = Object.keys(itemAssigns);
 
       if (assignedPeople.length > 0) {
-        // Hitung total porsi untuk item ini
         const totalPortions = Object.values(itemAssigns).reduce(
           (a, b) => a + b,
           0
         );
-
         assignedPeople.forEach((person) => {
           const portions = itemAssigns[person];
-          // Harga dibagi berdasarkan rasio porsi yang diambil
           const priceShare = (portions / totalPortions) * item.price;
           if (bills[person]) bills[person].subtotal += priceShare;
         });
@@ -158,47 +149,84 @@ export default function Home() {
     setFinalBills(bills);
   };
 
+  const isReadyToCalculate =
+    result?.items && Array.isArray(result.items)
+      ? result.items.every((item, index) => {
+          const itemAssigns = assignments[index] || {};
+          const totalPortions = Object.values(itemAssigns).reduce(
+            (a, b) => a + b,
+            0
+          );
+          if (item.qty > 1) {
+            return totalPortions === item.qty;
+          } else {
+            return totalPortions > 0;
+          }
+        })
+      : false;
+
   return (
-    <main className="min-h-screen p-4 sm:p-8 bg-[#F5D6BA] text-[#2C2C54] font-sans pb-24 selection:bg-[#F49D6E] selection:text-[#2C2C54]">
-      <div className="max-w-md mx-auto space-y-6 sm:space-y-8">
-        <div className="text-center space-y-2 mt-4 sm:mt-8">
-          <h1 className="text-4xl font-extrabold tracking-tight text-[#A40E4C]">
-            SnapPatungan
+    <main className="min-h-screen p-4 sm:p-8 bg-zinc-200 text-zinc-800 font-mono pb-24 flex flex-col items-center">
+      {/* Custom Styles untuk Efek Kertas Struk */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        .receipt-bottom {
+          background-image: radial-gradient(circle at 10px 0, transparent 10px, #fafafa 11px);
+          background-size: 20px 20px;
+          background-position: top center;
+          height: 20px;
+          width: 100%;
+          transform: rotate(180deg);
+        }
+        @keyframes print {
+          0% { transform: translateY(-100%); opacity: 0; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+        .animate-print {
+          animation: print 2s ease-out forwards;
+        }
+      `,
+        }}
+      />
+
+      <div className="w-full max-w-md space-y-6">
+        {/* HEADER / LOGO */}
+        <div className="text-center space-y-1 mb-8">
+          <h1 className="text-2xl font-bold tracking-widest uppercase border-b-2 border-zinc-800 inline-block pb-1">
+            SNAP_PATUNGAN
           </h1>
-          <p className="text-[#2C2C54]/70 font-medium">
-            Bagi tagihan tanpa pusing.
+          <p className="text-xs text-zinc-500 uppercase tracking-widest mt-2">
+            Point of Sale System
           </p>
         </div>
 
-        {/* SECTION 1: UPLOAD (Tetap Sama) */}
+        {/* SECTION 1: UPLOAD & LOADING */}
         {!result && (
-          <div className="bg-white/80 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-xl border border-white">
-            <div className="space-y-4">
-              <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-[#ACC3A6] rounded-2xl cursor-pointer bg-white hover:bg-[#F5D6BA]/20 transition-all">
+          <div className="bg-zinc-50 p-6 shadow-md rounded-sm border border-zinc-300 relative overflow-hidden">
+            {!loading ? (
+              <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-zinc-400 hover:border-zinc-800 hover:bg-zinc-100 cursor-pointer transition-colors group">
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                  <div className="bg-[#F49D6E]/20 p-3 rounded-full mb-3">
-                    <svg
-                      className="w-8 h-8 text-[#F49D6E]"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                      ></path>
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-                      ></path>
-                    </svg>
-                  </div>
-                  <p className="mb-2 text-sm font-semibold text-[#2C2C54]">
-                    Tap untuk Foto Struk
+                  <svg
+                    className="w-10 h-10 text-zinc-400 group-hover:text-zinc-800 mb-3 transition-colors"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                    ></path>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                    ></path>
+                  </svg>
+                  <p className="text-sm font-semibold uppercase tracking-wider text-zinc-600 group-hover:text-zinc-900">
+                    Upload Struk
                   </p>
                 </div>
                 <input
@@ -208,223 +236,291 @@ export default function Home() {
                   className="hidden"
                 />
               </label>
-              {loading && (
-                <p className="text-center text-[#A40E4C] font-semibold animate-pulse mt-4">
-                  Mengekstrak data...
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10 space-y-4">
+                <div className="w-20 h-24 border border-zinc-300 bg-white shadow-inner flex flex-col items-center p-2 overflow-hidden relative">
+                  {/* Animasi Kertas Keluar */}
+                  <div className="w-full h-full bg-zinc-100 absolute top-0 flex flex-col gap-1 p-2 animate-print">
+                    <div className="w-full h-1 bg-zinc-300"></div>
+                    <div className="w-3/4 h-1 bg-zinc-300"></div>
+                    <div className="w-full h-1 bg-zinc-300"></div>
+                    <div className="w-1/2 h-1 bg-zinc-300"></div>
+                  </div>
+                </div>
+                <p className="text-xs uppercase tracking-widest text-zinc-500 animate-pulse">
+                  PROCESSING DATA...
                 </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* SECTION 2: INTERACTIVE SPLIT */}
-        {result && !finalBills && (
-          <div className="space-y-6">
-            {/* Input Partisipan (Tetap Sama) */}
-            <div className="bg-white p-6 rounded-3xl shadow-lg border border-white">
-              <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <span className="bg-[#2C2C54] text-white w-6 h-6 flex items-center justify-center rounded-full text-sm">
-                  1
-                </span>
-                Siapa yang ikut?
-              </h2>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newParticipant}
-                  onChange={(e) => setNewParticipant(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addParticipant()}
-                  placeholder="Ketik nama..."
-                  className="flex-1 border-2 border-[#ACC3A6]/30 bg-gray-50 p-3 rounded-xl outline-none"
-                />
-                <button
-                  onClick={addParticipant}
-                  className="bg-[#2C2C54] text-white px-5 py-3 rounded-xl font-bold"
-                >
-                  +
-                </button>
-              </div>
-              {participants.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-[#ACC3A6]/20">
-                  {participants.map((p) => (
-                    <span
-                      key={p}
-                      className="bg-[#F5D6BA] text-[#A40E4C] px-4 py-1.5 rounded-full text-sm font-bold shadow-sm"
-                    >
-                      {p}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* PERUBAHAN 5: UI Assign Menu dengan Counter */}
-            {participants.length > 0 && (
-              <div className="bg-white p-6 rounded-3xl shadow-lg border border-white">
-                <h2 className="text-lg font-bold mb-6 flex items-center gap-2">
-                  <span className="bg-[#2C2C54] text-white w-6 h-6 flex items-center justify-center rounded-full text-sm">
-                    2
-                  </span>
-                  Siapa makan apa?
-                </h2>
-                <div className="space-y-6">
-                  {result.items.map((item, index) => {
-                    const itemAssigns = assignments[index] || {};
-                    const hasAssignees = Object.keys(itemAssigns).length > 0;
-
-                    return (
-                      <div
-                        key={index}
-                        className="border-b border-[#ACC3A6]/20 pb-6 last:border-0 last:pb-0"
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <span className="font-bold text-[#2C2C54] pr-4">
-                            {item.name}{" "}
-                            <span className="text-[#A40E4C] text-sm">
-                              (x{item.qty})
-                            </span>
-                          </span>
-                          <span className="text-[#2C2C54]/70 font-semibold whitespace-nowrap">
-                            Rp {item.price.toLocaleString("id-ID")}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-3">
-                          {/* Pil Nama */}
-                          <div className="flex flex-wrap gap-2">
-                            {participants.map((person) => {
-                              const isSelected = !!itemAssigns[person];
-                              return (
-                                <button
-                                  key={person}
-                                  onClick={() =>
-                                    toggleAssignment(index, person)
-                                  }
-                                  className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all border-2 
-                                    ${
-                                      isSelected
-                                        ? "bg-[#F49D6E] text-[#2C2C54] border-[#F49D6E] shadow-md"
-                                        : "bg-transparent text-[#2C2C54]/60 border-[#ACC3A6]/40 hover:border-[#ACC3A6]"
-                                    }`}
-                                >
-                                  {person}
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          {/* Sub-menu Counter muncul HANYA untuk orang yang terpilih */}
-                          {hasAssignees && (
-                            <div className="bg-[#F5D6BA]/30 p-3 rounded-xl mt-1 space-y-2 border border-[#F5D6BA]">
-                              <p className="text-xs font-semibold text-[#2C2C54]/60 mb-2">
-                                Atur Rasio/Bobot Patungan:
-                              </p>
-                              {Object.entries(itemAssigns).map(
-                                ([person, qty]) => (
-                                  <div
-                                    key={person}
-                                    className="flex justify-between items-center bg-white px-3 py-2 rounded-lg shadow-sm"
-                                  >
-                                    <span className="text-sm font-bold text-[#2C2C54]">
-                                      {person}
-                                    </span>
-                                    <div className="flex items-center gap-3">
-                                      <button
-                                        onClick={() =>
-                                          updatePortion(index, person, -1)
-                                        }
-                                        className="w-7 h-7 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center font-bold text-[#2C2C54] transition-colors"
-                                      >
-                                        -
-                                      </button>
-
-                                      <span className="text-sm font-extrabold w-4 text-center">
-                                        {qty}
-                                      </span>
-
-                                      {/* Tombol Plus kembali normal, tidak ada blokir */}
-                                      <button
-                                        onClick={() =>
-                                          updatePortion(index, person, 1)
-                                        }
-                                        className="w-7 h-7 bg-[#2C2C54] text-white hover:bg-[#2C2C54]/80 rounded-full flex items-center justify-center font-bold transition-colors"
-                                      >
-                                        +
-                                      </button>
-                                    </div>
-                                  </div>
-                                )
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <button
-                  onClick={calculateSplit}
-                  className="w-full mt-8 bg-[#A40E4C] hover:bg-[#A40E4C]/90 text-white font-extrabold py-4 rounded-2xl shadow-lg transition-all active:scale-95 text-lg"
-                >
-                  Hitung Tagihan
-                </button>
               </div>
             )}
           </div>
         )}
 
-        {/* SECTION 3: FINAL RESULT (Tetap Sama) */}
-        {finalBills && (
-          // ... (Kode Section 3 sama persis seperti sebelumnya) ...
-          <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-2xl shadow-[#2C2C54]/10 border border-white space-y-6 relative overflow-hidden">
-            <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#F49D6E]/20 rounded-full blur-2xl"></div>
-            <div className="text-center border-b border-[#ACC3A6]/20 pb-6 relative z-10">
-              <h2 className="text-3xl font-extrabold text-[#A40E4C]">
-                Bill Selesai! 🎉
-              </h2>
-            </div>
-            <div className="space-y-4 relative z-10">
-              {Object.entries(finalBills).map(([person, bill]) => (
-                <div
-                  key={person}
-                  className="bg-[#F5D6BA]/30 p-4 rounded-2xl border border-[#F5D6BA]"
-                >
-                  <h3 className="font-extrabold text-xl text-[#2C2C54] mb-3">
-                    {person}
-                  </h3>
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-sm font-medium text-[#2C2C54]/70">
-                      <span>Subtotal Item</span>
-                      <span>
-                        Rp {Math.round(bill.subtotal).toLocaleString("id-ID")}
-                      </span>
+        {/* BUNGKUSAN KERTAS STRUK (SECTION 2 & 3) */}
+        {result && (
+          <div className="shadow-lg relative">
+            <div className="bg-[#fafafa] p-6 sm:p-8 border border-zinc-200">
+              {/* Kepala Struk */}
+              <div className="text-center border-b-2 border-dashed border-zinc-300 pb-6 mb-6">
+                <h2 className="text-xl font-bold uppercase tracking-wider">
+                  RESTO SNAP
+                </h2>
+                <p className="text-xs text-zinc-500 mt-1 uppercase">
+                  Tgl: {new Date().toLocaleDateString("id-ID")} | Kasir: AI
+                </p>
+                <p className="text-xs text-zinc-500 uppercase">
+                  ------------------------
+                </p>
+              </div>
+
+              {/* SECTION 2: INTERACTIVE SPLIT */}
+              {!finalBills && (
+                <div className="space-y-8">
+                  {/* Input Partisipan */}
+                  <div>
+                    <h3 className="text-sm font-bold uppercase mb-3 text-zinc-600">
+                      {" "}
+                      1. INPUT CUSTOMER
+                    </h3>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newParticipant}
+                        onChange={(e) => setNewParticipant(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addParticipant()}
+                        placeholder="NAMA..."
+                        className="flex-1 bg-transparent border-b-2 border-zinc-300 p-2 text-sm uppercase outline-none focus:border-zinc-800 transition-colors"
+                      />
+                      <button
+                        onClick={addParticipant}
+                        className="bg-zinc-800 text-white px-4 py-2 text-xs font-bold uppercase rounded-sm hover:bg-zinc-700 active:scale-95 transition-all"
+                      >
+                        ADD
+                      </button>
                     </div>
-                    <div className="flex justify-between text-sm font-medium text-[#2C2C54]/70">
-                      <span>Pajak & Layanan</span>
-                      <span>
-                        Rp {Math.round(bill.extra).toLocaleString("id-ID")}
-                      </span>
-                    </div>
-                    <div className="flex justify-between font-extrabold text-lg pt-2 mt-2 border-t border-[#ACC3A6]/20 text-[#A40E4C]">
-                      <span>Total</span>
-                      <span>
-                        Rp {Math.round(bill.total).toLocaleString("id-ID")}
-                      </span>
-                    </div>
+
+                    {participants.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-4">
+                        {participants.map((p) => (
+                          <span
+                            key={p}
+                            className="bg-zinc-200 text-zinc-800 px-3 py-1 text-xs font-bold uppercase rounded-sm"
+                          >
+                            {p}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Assign Menu */}
+                  {participants.length > 0 && (
+                    <div className="pt-4 border-t-2 border-dashed border-zinc-300">
+                      <h3 className="text-sm font-bold uppercase mb-4 text-zinc-600">
+                        {" "}
+                        2. ORDER LIST
+                      </h3>
+
+                      <div className="space-y-6">
+                        {result.items?.map((item, index) => {
+                          const itemAssigns = assignments[index] || {};
+                          const hasAssignees =
+                            Object.keys(itemAssigns).length > 0;
+                          const currentTotal = Object.values(
+                            itemAssigns
+                          ).reduce((a, b) => a + b, 0);
+                          const isUnbalanced =
+                            item.qty > 1 && currentTotal !== item.qty;
+
+                          return (
+                            <div key={index} className="flex flex-col gap-2">
+                              <div className="flex justify-between items-start">
+                                <span className="font-bold text-sm uppercase">
+                                  {item.qty}x {item.name}
+                                </span>
+                                <span className="text-sm">
+                                  {item.price.toLocaleString("id-ID")}
+                                </span>
+                              </div>
+
+                              {/* Error Label ala cap stempel */}
+                              {isUnbalanced && hasAssignees && (
+                                <span className="text-[10px] bg-red-100 text-red-600 font-bold px-2 py-0.5 w-fit uppercase border border-red-300">
+                                  ! QTY INVALID ({currentTotal}/{item.qty})
+                                </span>
+                              )}
+
+                              <div className="flex flex-col gap-2 mt-1">
+                                <div className="flex flex-wrap gap-2">
+                                  {participants.map((person) => {
+                                    const isSelected = !!itemAssigns[person];
+                                    return (
+                                      <button
+                                        key={person}
+                                        onClick={() =>
+                                          toggleAssignment(index, person)
+                                        }
+                                        className={`px-3 py-1 text-xs font-bold uppercase border border-zinc-300 transition-all
+                                          ${
+                                            isSelected
+                                              ? "bg-yellow-200 text-zinc-900 border-yellow-400 shadow-[2px_2px_0px_#eab308]"
+                                              : "bg-transparent text-zinc-500 hover:bg-zinc-100"
+                                          }`}
+                                      >
+                                        {person}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {hasAssignees && (
+                                  <div className="bg-zinc-100 p-2 mt-1 border border-zinc-200">
+                                    <p className="text-[10px] font-bold text-zinc-500 mb-2 uppercase tracking-wider">
+                                      SHARE RATIO:
+                                    </p>
+                                    <div className="space-y-1">
+                                      {Object.entries(itemAssigns).map(
+                                        ([person, qty]) => (
+                                          <div
+                                            key={person}
+                                            className="flex justify-between items-center px-1"
+                                          >
+                                            <span className="text-xs font-bold uppercase">
+                                              - {person}
+                                            </span>
+                                            <div className="flex items-center gap-2">
+                                              <button
+                                                onClick={() =>
+                                                  updatePortion(
+                                                    index,
+                                                    person,
+                                                    -1
+                                                  )
+                                                }
+                                                className="w-5 h-5 bg-zinc-300 flex items-center justify-center text-xs font-bold hover:bg-zinc-400"
+                                              >
+                                                -
+                                              </button>
+                                              <span className="text-xs font-bold w-4 text-center">
+                                                {qty}
+                                              </span>
+                                              <button
+                                                onClick={() =>
+                                                  updatePortion(
+                                                    index,
+                                                    person,
+                                                    1
+                                                  )
+                                                }
+                                                className="w-5 h-5 bg-zinc-800 text-white flex items-center justify-center text-xs font-bold hover:bg-zinc-700"
+                                              >
+                                                +
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Tombol Hitung ala Mesin Kasir */}
+                      <div className="mt-8 pt-6 border-t-2 border-dashed border-zinc-300 space-y-3">
+                        {!isReadyToCalculate && (
+                          <div className="bg-red-50 p-2 text-center border border-red-200">
+                            <p className="text-[11px] font-bold text-red-600 uppercase">
+                              ERROR: ALOKASI QTY BELUM SESUAI
+                            </p>
+                          </div>
+                        )}
+                        <button
+                          onClick={calculateSplit}
+                          disabled={!isReadyToCalculate}
+                          className={`w-full py-4 text-sm font-bold uppercase tracking-widest transition-all rounded-sm
+                            ${
+                              isReadyToCalculate
+                                ? "bg-zinc-900 text-white shadow-[0_4px_0px_#3f3f46] active:shadow-none active:translate-y-[4px]"
+                                : "bg-zinc-300 text-zinc-500 cursor-not-allowed"
+                            }`}
+                        >
+                          [ PRINT INVOICE ]
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))}
+              )}
+
+              {/* SECTION 3: FINAL RESULT (Tampilan Akhir Struk) */}
+              {finalBills && (
+                <div className="space-y-6 animate-print">
+                  <div className="text-center mb-6">
+                    <p className="text-sm font-bold uppercase tracking-wider">
+                      SPLIT RESULT &lt;&lt;
+                    </p>
+                  </div>
+
+                  <div className="space-y-6">
+                    {Object.entries(finalBills).map(([person, bill]) => (
+                      <div
+                        key={person}
+                        className="border-b border-zinc-300 pb-4 last:border-0"
+                      >
+                        <h3 className="font-bold text-base uppercase mb-2 bg-yellow-200 inline-block px-1">
+                          {person}
+                        </h3>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-zinc-600">SUBTOTAL</span>
+                            <span>
+                              {Math.round(bill.subtotal).toLocaleString(
+                                "id-ID"
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-600">TAX & SVC</span>
+                            <span>
+                              {Math.round(bill.extra).toLocaleString("id-ID")}
+                            </span>
+                          </div>
+                          <div className="flex justify-between font-bold text-sm pt-2 mt-1 border-t border-dashed border-zinc-400">
+                            <span>TOTAL DUE</span>
+                            <span>
+                              Rp{" "}
+                              {Math.round(bill.total).toLocaleString("id-ID")}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="text-center pt-8 space-y-1">
+                    <p className="text-xs uppercase font-bold">TERIMA KASIH</p>
+                    <p className="text-[10px] text-zinc-500">
+                      POWERED BY GEMINI 3.5 FLASH
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setResult(null);
+                      setFinalBills(null);
+                    }}
+                    className="w-full mt-6 bg-transparent border-2 border-zinc-800 text-zinc-800 font-bold py-3 text-xs uppercase hover:bg-zinc-100 transition-colors"
+                  >
+                    SCAN STRUK BARU
+                  </button>
+                </div>
+              )}
             </div>
-            <button
-              onClick={() => {
-                setResult(null);
-                setFinalBills(null);
-              }}
-              className="w-full mt-2 bg-[#2C2C54] text-white font-bold py-4 rounded-2xl"
-            >
-              Scan Struk Baru
-            </button>
+            {/* Bagian Bawah Kertas Struk (Zigzag) */}
+            <div className="receipt-bottom"></div>
           </div>
         )}
       </div>
