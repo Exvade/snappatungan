@@ -574,7 +574,7 @@ export default function Home() {
                   <div className="text-center pt-8 space-y-1">
                     <p className="text-xs uppercase font-bold">TERIMA KASIH</p>
                     <p className="text-[10px] text-zinc-500">
-                      POWERED BY GEMINI 3.5 FLASH
+                      POWERED BY GEMINI 2.5 FLASH
                     </p>
                   </div>
 
