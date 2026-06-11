@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     // Gunakan model Flash yang cepat dan mendukung multimodal
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       generationConfig: {
         temperature: 0, // Sangat cepat, fokus pada fakta di gambar
         responseMimeType: "application/json", // Jauh lebih cepat dari format teks biasa
