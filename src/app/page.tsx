@@ -17,13 +17,95 @@ export default function Home() {
 
   const [participants, setParticipants] = useState<string[]>([]);
   const [newParticipant, setNewParticipant] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const [assignments, setAssignments] = useState<
     Record<number, Record<string, number>>
   >({});
   const [finalBills, setFinalBills] = useState<Record<
     string,
-    { subtotal: number; extra: number; total: number }
+    {
+      subtotal: number;
+      extra: number;
+      total: number;
+      items: { name: string; qty: number; priceShare: number }[];
+    }
   > | null>(null);
+
+  const startVoiceRecognition = () => {
+    // @ts-ignore
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Browser Anda tidak mendukung fitur Voice-to-Split. Coba gunakan Chrome atau Safari terbaru.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "id-ID";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = async (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setIsListening(false);
+      setIsProcessingVoice(true);
+
+      try {
+        const response = await fetch("/api/split-voice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transcript,
+            items: result?.items,
+            participants,
+            assignments,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Gagal memproses voice split");
+        }
+
+        const data = await response.json();
+        
+        if (data.participants) {
+          setParticipants((prev) => Array.from(new Set([...prev, ...data.participants])));
+        }
+
+        if (data.assignments) {
+          setAssignments((prev) => {
+            const merged = { ...prev };
+            Object.keys(data.assignments).forEach((idxStr) => {
+              const idx = parseInt(idxStr, 10);
+              merged[idx] = { ...(merged[idx] || {}), ...data.assignments[idxStr] };
+            });
+            return merged;
+          });
+        }
+      } catch (error) {
+        console.error("Voice Split Error:", error);
+        alert("Gagal memproses suara. Coba lagi.");
+      } finally {
+        setIsProcessingVoice(false);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event.error);
+      setIsListening(false);
+      alert("Gagal mendeteksi suara: " + event.error);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -112,6 +194,22 @@ export default function Home() {
     }
   };
 
+  const removeParticipant = (nameToRemove: string) => {
+    setParticipants((prev) => prev.filter((p) => p !== nameToRemove));
+    
+    // Hapus juga assignment orang tersebut di semua menu
+    setAssignments((prev) => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach((idxStr) => {
+        const idx = parseInt(idxStr, 10);
+        if (updated[idx] && updated[idx][nameToRemove]) {
+          delete updated[idx][nameToRemove];
+        }
+      });
+      return updated;
+    });
+  };
+
   const toggleAssignment = (itemIndex: number, person: string) => {
     setAssignments((prev) => {
       const itemAssignments = { ...(prev[itemIndex] || {}) };
@@ -144,11 +242,16 @@ export default function Home() {
 
     const bills: Record<
       string,
-      { subtotal: number; extra: number; total: number }
+      {
+        subtotal: number;
+        extra: number;
+        total: number;
+        items: { name: string; qty: number; priceShare: number }[];
+      }
     > = {};
 
     participants.forEach((p) => {
-      bills[p] = { subtotal: 0, extra: 0, total: 0 };
+      bills[p] = { subtotal: 0, extra: 0, total: 0, items: [] };
     });
 
     result.items.forEach((item, index) => {
@@ -163,7 +266,14 @@ export default function Home() {
         assignedPeople.forEach((person) => {
           const portions = itemAssigns[person];
           const priceShare = (portions / totalPortions) * item.price;
-          if (bills[person]) bills[person].subtotal += priceShare;
+          if (bills[person]) {
+            bills[person].subtotal += priceShare;
+            bills[person].items.push({
+              name: item.name,
+              qty: portions,
+              priceShare: priceShare,
+            });
+          }
         });
       }
     });
@@ -346,6 +456,29 @@ export default function Home() {
               {/* SECTION 2: INTERACTIVE SPLIT */}
               {!finalBills && (
                 <div className="space-y-8">
+                  {/* AI Voice Command */}
+                  <div className="bg-zinc-100 p-4 border border-dashed border-zinc-400 text-center space-y-3">
+                    <p className="text-xs font-bold uppercase text-zinc-600 tracking-widest">
+                      AI VOICE SPLIT &lt;&lt;
+                    </p>
+                    <button
+                      onClick={startVoiceRecognition}
+                      disabled={isListening || isProcessingVoice}
+                      className={`w-full py-3 flex items-center justify-center gap-2 text-sm font-bold uppercase transition-all shadow-[2px_2px_0px_#27272a] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] border-2 border-zinc-800
+                        ${isListening ? "bg-red-500 text-white border-red-800 shadow-[2px_2px_0px_#7f1d1d] animate-pulse" : 
+                          isProcessingVoice ? "bg-yellow-400 text-zinc-900 cursor-wait" : 
+                          "bg-white hover:bg-zinc-200 text-zinc-900"}`}
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                      </svg>
+                      {isListening ? "MENDENGARKAN..." : isProcessingVoice ? "MEMPROSES AI..." : "TAP TO SPEAK"}
+                    </button>
+                    <p className="text-[10px] text-zinc-500">
+                      Coba: "Budi nasi goreng, sisanya bagi rata"
+                    </p>
+                  </div>
+
                   {/* Input Partisipan */}
                   <div>
                     <h3 className="text-sm font-bold uppercase mb-3 text-zinc-600">
@@ -374,9 +507,16 @@ export default function Home() {
                         {participants.map((p) => (
                           <span
                             key={p}
-                            className="bg-zinc-200 text-zinc-800 px-3 py-1 text-xs font-bold uppercase rounded-sm"
+                            className="bg-zinc-200 text-zinc-800 pl-3 pr-2 py-1 text-xs font-bold uppercase rounded-sm flex items-center gap-2 group"
                           >
                             {p}
+                            <button
+                              onClick={() => removeParticipant(p)}
+                              className="text-zinc-400 hover:text-red-600 focus:outline-none transition-colors"
+                              title="Hapus"
+                            >
+                              ✕
+                            </button>
                           </span>
                         ))}
                       </div>
@@ -384,12 +524,11 @@ export default function Home() {
                   </div>
 
                   {/* Assign Menu */}
-                  {participants.length > 0 && (
-                    <div className="pt-4 border-t-2 border-dashed border-zinc-300">
-                      <h3 className="text-sm font-bold uppercase mb-4 text-zinc-600">
-                        {" "}
-                        2. ORDER LIST
-                      </h3>
+                  <div className="pt-4 border-t-2 border-dashed border-zinc-300">
+                    <h3 className="text-sm font-bold uppercase mb-4 text-zinc-600">
+                      {" "}
+                      2. ORDER LIST
+                    </h3>
 
                       <div className="space-y-6">
                         {result.items?.map((item, index) => {
@@ -522,7 +661,6 @@ export default function Home() {
                         </button>
                       </div>
                     </div>
-                  )}
                 </div>
               )}
 
@@ -544,7 +682,22 @@ export default function Home() {
                         <h3 className="font-bold text-base uppercase mb-2 bg-yellow-200 inline-block px-1">
                           {person}
                         </h3>
-                        <div className="space-y-1 text-xs">
+
+                        {/* MENU ITEMS ORDERED */}
+                        {bill.items.length > 0 && (
+                          <div className="mb-3 space-y-1">
+                            {bill.items.map((item, idx) => (
+                              <div key={idx} className="flex justify-between text-xs text-zinc-700">
+                                <span className="uppercase">
+                                  {item.qty}x {item.name}
+                                </span>
+                                <span>{Math.round(item.priceShare).toLocaleString("id-ID")}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="space-y-1 text-xs pt-2 border-t border-dashed border-zinc-300">
                           <div className="flex justify-between">
                             <span className="text-zinc-600">SUBTOTAL</span>
                             <span>
