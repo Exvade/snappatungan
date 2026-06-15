@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 type ReceiptItem = { name: string; qty: number; price: number };
 type ReceiptData = {
@@ -32,7 +32,16 @@ export default function Home() {
     }
   > | null>(null);
 
-  const startVoiceRecognition = () => {
+  const recognitionRef = useRef<any>(null);
+  const transcriptRef = useRef<string>("");
+
+  const toggleVoiceRecognition = () => {
+    if (isListening) {
+      // User mematikan mic secara manual
+      recognitionRef.current?.stop();
+      return;
+    }
+
     // @ts-ignore
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -41,17 +50,45 @@ export default function Home() {
     }
 
     const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    transcriptRef.current = ""; // Reset setiap kali mulai baru
+
     recognition.lang = "id-ID";
-    recognition.interimResults = false;
+    recognition.continuous = true; // Tidak akan mati saat ada jeda napas
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
+
+    let finalTranscript = "";
 
     recognition.onstart = () => {
       setIsListening(true);
     };
 
-    recognition.onresult = async (event: any) => {
-      const transcript = event.results[0][0].transcript;
+    recognition.onresult = (event: any) => {
+      let currentInterim = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript + " ";
+        } else {
+          currentInterim += event.results[i][0].transcript;
+        }
+      }
+      // Gabungkan hasil akhir dan hasil sementara
+      transcriptRef.current = finalTranscript + currentInterim;
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event.error);
       setIsListening(false);
+      alert("Gagal mendeteksi suara: " + event.error);
+    };
+
+    recognition.onend = async () => {
+      setIsListening(false);
+      
+      const fullTranscript = transcriptRef.current.trim();
+      if (!fullTranscript) return;
+
       setIsProcessingVoice(true);
 
       try {
@@ -59,7 +96,7 @@ export default function Home() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            transcript,
+            transcript: fullTranscript,
             items: result?.items,
             participants,
             assignments,
@@ -92,16 +129,6 @@ export default function Home() {
       } finally {
         setIsProcessingVoice(false);
       }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error", event.error);
-      setIsListening(false);
-      alert("Gagal mendeteksi suara: " + event.error);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
     };
 
     recognition.start();
@@ -462,8 +489,8 @@ export default function Home() {
                       AI VOICE SPLIT &lt;&lt;
                     </p>
                     <button
-                      onClick={startVoiceRecognition}
-                      disabled={isListening || isProcessingVoice}
+                      onClick={toggleVoiceRecognition}
+                      disabled={isProcessingVoice && !isListening}
                       className={`w-full py-3 flex items-center justify-center gap-2 text-sm font-bold uppercase transition-all shadow-[2px_2px_0px_#27272a] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] border-2 border-zinc-800
                         ${isListening ? "bg-red-500 text-white border-red-800 shadow-[2px_2px_0px_#7f1d1d] animate-pulse" : 
                           isProcessingVoice ? "bg-yellow-400 text-zinc-900 cursor-wait" : 
@@ -472,7 +499,7 @@ export default function Home() {
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
                       </svg>
-                      {isListening ? "MENDENGARKAN..." : isProcessingVoice ? "MEMPROSES AI..." : "TAP TO SPEAK"}
+                      {isListening ? "TAP UNTUK SELESAI" : isProcessingVoice ? "MEMPROSES AI..." : "TAP TO SPEAK"}
                     </button>
                     <p className="text-[10px] text-zinc-500">
                       Coba: "Budi nasi goreng, sisanya bagi rata"
