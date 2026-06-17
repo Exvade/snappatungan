@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
+import jsQR from "jsqr";
+import QRCode from "react-qr-code";
 
 type ReceiptItem = { name: string; qty: number; price: number };
 type ReceiptData = {
@@ -20,6 +22,8 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const [toast, setToast] = useState({ message: "", visible: false });
+  const [qrisString, setQrisString] = useState<string | null>(null);
+  const [qrisFileName, setQrisFileName] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<
     Record<number, Record<string, number>>
   >({});
@@ -43,6 +47,100 @@ export default function Home() {
     toastTimerRef.current = setTimeout(() => {
       setToast((prev) => ({ ...prev, visible: false }));
     }, 4000);
+  };
+
+  const handleQrisUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setQrisFileName("Sedang membaca QRIS...");
+
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.src = objectUrl;
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        showToast("Gagal memproses gambar QRIS");
+        setQrisFileName(null);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, img.width, img.height);
+      const imageData = ctx.getImageData(0, 0, img.width, img.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      });
+
+      if (code && code.data) {
+        setQrisString(code.data);
+        setQrisFileName("✅ " + file.name.substring(0, 15) + "...");
+        showToast("QRIS Penagih berhasil disimpan!");
+      } else {
+        setQrisFileName(null);
+        showToast("Gagal membaca QR Code dari gambar tersebut.");
+      }
+      URL.revokeObjectURL(objectUrl);
+    };
+    img.onerror = () => {
+      showToast("File rusak atau bukan gambar.");
+      setQrisFileName(null);
+    };
+  };
+
+  const generateDynamicQris = (baseQris: string, amount: number): string => {
+    if (!baseQris || baseQris.length < 10) return baseQris;
+
+    let qrisDataNo6304 = baseQris.slice(0, -8); // Asumsi QRIS valid berakhiran 6304 + 4 char CRC
+
+    // Parsing TLV secara sederhana
+    let parsed: Record<string, string> = {};
+    let i = 0;
+    while (i < qrisDataNo6304.length) {
+      let tag = qrisDataNo6304.substring(i, i + 2);
+      let lenStr = qrisDataNo6304.substring(i + 2, i + 4);
+      let len = parseInt(lenStr, 10);
+      if (isNaN(len)) break; // Safety check
+      let val = qrisDataNo6304.substring(i + 4, i + 4 + len);
+      parsed[tag] = val;
+      i += 4 + len;
+    }
+
+    // Ubah statis menjadi dinamis (Tag 01 = 12)
+    parsed["01"] = "12";
+    // Set Tag 54 (Transaction Amount)
+    parsed["54"] = amount.toString();
+
+    // Reconstruct string
+    let newQris = "";
+    const sortedKeys = Object.keys(parsed).sort();
+    for (const tag of sortedKeys) {
+      let val = parsed[tag];
+      let lenStr = val.length.toString().padStart(2, "0");
+      newQris += tag + lenStr + val;
+    }
+
+    newQris += "6304";
+
+    // Hitung ulang CRC16 CCITT
+    let crc = 0xffff;
+    for (let c = 0; c < newQris.length; c++) {
+      crc ^= newQris.charCodeAt(c) << 8;
+      for (let j = 0; j < 8; j++) {
+        if (crc & 0x8000) {
+          crc = (crc << 1) ^ 0x1021;
+        } else {
+          crc = crc << 1;
+        }
+      }
+    }
+    const finalCrc = (crc & 0xffff).toString(16).toUpperCase().padStart(4, "0");
+
+    return newQris + finalCrc;
   };
 
   const toggleVoiceRecognition = () => {
@@ -372,7 +470,7 @@ export default function Home() {
 
       <div className="w-full max-w-md space-y-6">
         {/* HEADER / LOGO */}
-        <div className="text-center space-y-1 mb-8">
+        <div className="text-center space-y-1 mb-6">
           <h1 className="text-2xl font-bold tracking-widest uppercase border-b-2 border-zinc-800 inline-block pb-1">
             SNAP_PATUNGAN
           </h1>
@@ -380,6 +478,20 @@ export default function Home() {
             Point of Sale System
           </p>
         </div>
+
+        {/* SETTING QRIS (OPSIONAL) */}
+        {!result && (
+          <div className="bg-zinc-100 p-4 border-2 border-dashed border-zinc-400 mb-6 text-center shadow-inner">
+            <p className="text-xs font-bold uppercase tracking-wider text-zinc-600 mb-3">
+              &gt;&gt; UPLOAD QRIS PENAGIH (OPSIONAL)
+            </p>
+            <label className="inline-block bg-yellow-400 text-zinc-900 border-2 border-zinc-800 px-4 py-2 text-xs font-bold uppercase tracking-widest cursor-pointer shadow-[2px_2px_0px_#27272a] hover:translate-y-[1px] hover:translate-x-[1px] hover:shadow-[1px_1px_0px_#27272a] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] transition-all">
+              {qrisFileName ? qrisFileName : "PILIH GAMBAR QRIS"}
+              <input type="file" accept="image/*" onChange={handleQrisUpload} className="hidden" />
+            </label>
+            <p className="text-[10px] text-zinc-500 mt-2">Agar teman bisa langsung scan saat bayar</p>
+          </div>
+        )}
 
         {/* SECTION 1: UPLOAD & LOADING */}
         {!result && (
@@ -757,6 +869,22 @@ export default function Home() {
                             </span>
                           </div>
                         </div>
+
+                        {/* RENDER DYNAMIC QRIS IF AVAILABLE */}
+                        {qrisString && Math.round(bill.total) > 0 && (
+                          <div className="mt-4 flex flex-col items-center p-3 bg-white border-2 border-zinc-800 shadow-[2px_2px_0px_#27272a]">
+                            <p className="text-[10px] font-bold uppercase tracking-widest mb-2 text-zinc-600">
+                              SCAN TO PAY (Rp {Math.round(bill.total).toLocaleString("id-ID")})
+                            </p>
+                            <div className="p-1 border border-zinc-300">
+                              <QRCode
+                                value={generateDynamicQris(qrisString, Math.round(bill.total))}
+                                size={120}
+                                level="M"
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
