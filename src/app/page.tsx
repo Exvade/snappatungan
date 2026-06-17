@@ -24,6 +24,8 @@ export default function Home() {
   const [toast, setToast] = useState({ message: "", visible: false });
   const [qrisString, setQrisString] = useState<string | null>(null);
   const [qrisFileName, setQrisFileName] = useState<string | null>(null);
+  const [isEditingReceipt, setIsEditingReceipt] = useState(false);
+  const [tempReceipt, setTempReceipt] = useState<ReceiptData | null>(null);
   const [assignments, setAssignments] = useState<
     Record<number, Record<string, number>>
   >({});
@@ -78,7 +80,7 @@ export default function Home() {
 
       if (code && code.data) {
         setQrisString(code.data);
-        setQrisFileName("✅ " + file.name.substring(0, 15) + "...");
+        setQrisFileName(file.name.substring(0, 15) + "...");
         showToast("QRIS Penagih berhasil disimpan!");
       } else {
         setQrisFileName(null);
@@ -141,6 +143,57 @@ export default function Home() {
     const finalCrc = (crc & 0xffff).toString(16).toUpperCase().padStart(4, "0");
 
     return newQris + finalCrc;
+  };
+
+  const startEditing = () => {
+    if (result) {
+      setTempReceipt(JSON.parse(JSON.stringify(result)));
+      setIsEditingReceipt(true);
+    }
+  };
+
+  const cancelEditing = () => {
+    setIsEditingReceipt(false);
+    setTempReceipt(null);
+  };
+
+  const saveEditing = () => {
+    if (tempReceipt) {
+      const newSubtotal = tempReceipt.items.reduce((acc, item) => acc + item.price, 0);
+      const newTotal = newSubtotal + tempReceipt.tax + tempReceipt.service_charge;
+      const updatedReceipt = { ...tempReceipt, subtotal: newSubtotal, total: newTotal };
+      
+      setResult(updatedReceipt);
+      setAssignments({});
+      setFinalBills(null);
+      setIsEditingReceipt(false);
+      setTempReceipt(null);
+      showToast("Struk diperbarui & alokasi direset");
+    }
+  };
+
+  const updateTempItem = (index: number, field: keyof ReceiptItem, value: any) => {
+    setTempReceipt((prev) => {
+      if (!prev) return prev;
+      const newItems = [...prev.items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return { ...prev, items: newItems };
+    });
+  };
+
+  const addTempItem = () => {
+    setTempReceipt((prev) => {
+      if (!prev) return prev;
+      return { ...prev, items: [...prev.items, { name: "", qty: 1, price: 0 }] };
+    });
+  };
+
+  const removeTempItem = (index: number) => {
+    setTempReceipt((prev) => {
+      if (!prev) return prev;
+      const newItems = prev.items.filter((_, i) => i !== index);
+      return { ...prev, items: newItems };
+    });
   };
 
   const toggleVoiceRecognition = () => {
@@ -457,13 +510,6 @@ export default function Home() {
           width: 100%;
           transform: rotate(180deg);
         }
-        @keyframes print {
-          0% { transform: translateY(-100%); opacity: 0; }
-          100% { transform: translateY(0); opacity: 1; }
-        }
-        .animate-print {
-          animation: print 2s ease-out forwards;
-        }
       `,
         }}
       />
@@ -486,7 +532,12 @@ export default function Home() {
               &gt;&gt; UPLOAD QRIS PENAGIH (OPSIONAL)
             </p>
             <label className="inline-block bg-yellow-400 text-zinc-900 border-2 border-zinc-800 px-4 py-2 text-xs font-bold uppercase tracking-widest cursor-pointer shadow-[2px_2px_0px_#27272a] hover:translate-y-[1px] hover:translate-x-[1px] hover:shadow-[1px_1px_0px_#27272a] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] transition-all">
-              {qrisFileName ? qrisFileName : "PILIH GAMBAR QRIS"}
+              <div className="flex items-center gap-2">
+                {qrisFileName && (
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                )}
+                <span>{qrisFileName ? qrisFileName : "PILIH GAMBAR QRIS"}</span>
+              </div>
               <input type="file" accept="image/*" onChange={handleQrisUpload} className="hidden" />
             </label>
             <p className="text-[10px] text-zinc-500 mt-2">Agar teman bisa langsung scan saat bayar</p>
@@ -570,7 +621,7 @@ export default function Home() {
             ) : (
               <div className="flex flex-col items-center justify-center py-10 space-y-4">
                 <div className="w-20 h-24 border border-zinc-300 bg-white shadow-inner flex flex-col items-center p-2 overflow-hidden relative">
-                  <div className="w-full h-full bg-zinc-100 absolute top-0 flex flex-col gap-1 p-2 animate-print">
+                  <div className="w-full h-full bg-zinc-100 absolute top-0 flex flex-col gap-1 p-2">
                     <div className="w-full h-1 bg-zinc-300"></div>
                     <div className="w-3/4 h-1 bg-zinc-300"></div>
                     <div className="w-full h-1 bg-zinc-300"></div>
@@ -605,7 +656,97 @@ export default function Home() {
               {/* SECTION 2: INTERACTIVE SPLIT */}
               {!finalBills && (
                 <div className="space-y-8">
-                  {/* AI Voice Command */}
+                  {isEditingReceipt ? (
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-bold uppercase mb-4 text-zinc-600 border-b-2 border-zinc-300 pb-2 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                        EDIT DATA STRUK
+                      </h3>
+                      
+                      <div className="space-y-2">
+                        {tempReceipt?.items.map((item, idx) => (
+                          <div key={idx} className="flex gap-2 items-center bg-zinc-100 p-2 border border-zinc-300">
+                            <div className="flex-1 flex flex-col gap-2">
+                              <input
+                                type="text"
+                                value={item.name}
+                                onChange={(e) => updateTempItem(idx, "name", e.target.value)}
+                                placeholder="Nama Item"
+                                className="w-full bg-white border border-zinc-300 px-2 py-1 text-xs uppercase"
+                              />
+                              <div className="flex gap-2">
+                                <input
+                                  type="number"
+                                  value={item.qty === 0 ? "" : item.qty}
+                                  onChange={(e) => updateTempItem(idx, "qty", parseInt(e.target.value) || 0)}
+                                  placeholder="Qty"
+                                  className="w-16 bg-white border border-zinc-300 px-2 py-1 text-xs"
+                                />
+                                <input
+                                  type="number"
+                                  value={item.price === 0 ? "" : item.price}
+                                  onChange={(e) => updateTempItem(idx, "price", parseInt(e.target.value) || 0)}
+                                  placeholder="Total Harga"
+                                  className="flex-1 bg-white border border-zinc-300 px-2 py-1 text-xs"
+                                />
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeTempItem(idx)}
+                              className="bg-red-500 text-white w-8 h-8 flex items-center justify-center font-bold shadow-[2px_2px_0px_#7f1d1d] hover:translate-y-[1px] hover:translate-x-[1px] hover:shadow-[1px_1px_0px_#7f1d1d] transition-all"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <button
+                        onClick={addTempItem}
+                        className="w-full py-2 bg-zinc-200 border-2 border-dashed border-zinc-400 text-xs font-bold uppercase hover:bg-zinc-300 transition-colors"
+                      >
+                        + TAMBAH ITEM
+                      </button>
+
+                      <div className="pt-4 border-t-2 border-dashed border-zinc-300 space-y-2">
+                         <div className="flex justify-between items-center text-xs">
+                           <span className="font-bold text-zinc-600">PAJAK (TAX)</span>
+                           <input
+                              type="number"
+                              value={tempReceipt?.tax === 0 ? "" : tempReceipt?.tax}
+                              onChange={(e) => setTempReceipt(prev => prev ? {...prev, tax: parseInt(e.target.value) || 0} : prev)}
+                              className="w-32 bg-white border border-zinc-300 px-2 py-1 text-right"
+                            />
+                         </div>
+                         <div className="flex justify-between items-center text-xs">
+                           <span className="font-bold text-zinc-600">SERVICE CHARGE</span>
+                           <input
+                              type="number"
+                              value={tempReceipt?.service_charge === 0 ? "" : tempReceipt?.service_charge}
+                              onChange={(e) => setTempReceipt(prev => prev ? {...prev, service_charge: parseInt(e.target.value) || 0} : prev)}
+                              className="w-32 bg-white border border-zinc-300 px-2 py-1 text-right"
+                            />
+                         </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-4">
+                        <button
+                          onClick={cancelEditing}
+                          className="flex-1 py-3 bg-zinc-300 text-zinc-800 text-xs font-bold uppercase shadow-[2px_2px_0px_#a1a1aa] active:shadow-none active:translate-y-[2px] transition-all"
+                        >
+                          BATAL
+                        </button>
+                        <button
+                          onClick={saveEditing}
+                          className="flex-1 py-3 bg-zinc-900 text-white text-xs font-bold uppercase shadow-[2px_2px_0px_#3f3f46] active:shadow-none active:translate-y-[2px] transition-all"
+                        >
+                          SIMPAN
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* AI Voice Command */}
                   <div className="bg-zinc-100 p-4 border border-dashed border-zinc-400 text-center space-y-3">
                     <p className="text-xs font-bold uppercase text-zinc-600 tracking-widest">
                       AI VOICE SPLIT &lt;&lt;
@@ -674,10 +815,15 @@ export default function Home() {
 
                   {/* Assign Menu */}
                   <div className="pt-4 border-t-2 border-dashed border-zinc-300">
-                    <h3 className="text-sm font-bold uppercase mb-4 text-zinc-600">
-                      {" "}
-                      2. ORDER LIST
-                    </h3>
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-sm font-bold uppercase text-zinc-600">
+                        2. ORDER LIST
+                      </h3>
+                      <button onClick={startEditing} className="text-[10px] bg-zinc-200 text-zinc-700 px-2 py-1 border border-zinc-400 font-bold uppercase hover:bg-zinc-300 transition-colors flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                        EDIT STRUK
+                      </button>
+                    </div>
 
                       <div className="space-y-6">
                         {result.items?.map((item, index) => {
@@ -810,12 +956,14 @@ export default function Home() {
                         </button>
                       </div>
                     </div>
+                    </>
+                  )}
                 </div>
               )}
 
               {/* SECTION 3: FINAL RESULT (Tampilan Akhir Struk) */}
               {finalBills && (
-                <div className="space-y-6 animate-print">
+                <div className="space-y-6 fade-in">
                   <div className="text-center mb-6">
                     <p className="text-sm font-bold uppercase tracking-wider">
                       SPLIT RESULT &lt;&lt;
