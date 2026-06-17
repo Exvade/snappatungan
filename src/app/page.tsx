@@ -19,6 +19,7 @@ export default function Home() {
   const [newParticipant, setNewParticipant] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  const [toast, setToast] = useState({ message: "", visible: false });
   const [assignments, setAssignments] = useState<
     Record<number, Record<string, number>>
   >({});
@@ -34,6 +35,15 @@ export default function Home() {
 
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>("");
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (message: string) => {
+    setToast({ message, visible: true });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      setToast((prev) => ({ ...prev, visible: false }));
+    }, 4000);
+  };
 
   const toggleVoiceRecognition = () => {
     if (isListening) {
@@ -45,7 +55,7 @@ export default function Home() {
     // @ts-ignore
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Browser Anda tidak mendukung fitur Voice-to-Split. Coba gunakan Chrome atau Safari terbaru.");
+      showToast("Browser Anda tidak mendukung fitur Voice-to-Split. Coba gunakan Chrome atau Safari terbaru.");
       return;
     }
 
@@ -80,7 +90,7 @@ export default function Home() {
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error", event.error);
       setIsListening(false);
-      alert("Gagal mendeteksi suara: " + event.error);
+      showToast("Gagal mendeteksi suara: " + event.error);
     };
 
     recognition.onend = async () => {
@@ -125,7 +135,7 @@ export default function Home() {
         }
       } catch (error) {
         console.error("Voice Split Error:", error);
-        alert("Gagal memproses suara. Coba lagi.");
+        showToast("Gagal memproses suara. Coba lagi.");
       } finally {
         setIsProcessingVoice(false);
       }
@@ -141,7 +151,7 @@ export default function Home() {
     e.target.value = "";
 
     if (!file) {
-      alert("Gagal membaca file dari kamera/galeri.");
+      showToast("Gagal membaca file dari kamera/galeri.");
       return;
     }
 
@@ -198,18 +208,18 @@ export default function Home() {
           setResult(data);
         } catch (error) {
           console.error("Error Processing:", error);
-          alert("Gagal memproses gambar. Pastikan koneksi WiFi stabil.");
+          showToast("Gagal memproses gambar. Pastikan koneksi WiFi stabil.");
         } finally {
           setLoading(false);
         }
       };
 
       img.onerror = () => {
-        alert("File yang dimasukkan bukan gambar yang valid atau rusak.");
+        showToast("File yang dimasukkan bukan gambar yang valid atau rusak.");
         setLoading(false);
       };
     } catch (error) {
-      alert("Browser gagal memuat kamera/gambar.");
+      showToast("Browser gagal memuat kamera/gambar.");
       setLoading(false);
     }
   };
@@ -774,6 +784,40 @@ export default function Home() {
             <div className="receipt-bottom"></div>
           </div>
         )}
+      </div>
+
+      {/* TOAST POPUP */}
+      <div
+        className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 ${
+          toast.visible
+            ? "opacity-100 translate-y-0"
+            : "opacity-0 translate-y-4 pointer-events-none"
+        }`}
+      >
+        <div className="bg-zinc-900 text-white px-4 py-3 shadow-[4px_4px_0px_#facc15] border-2 border-zinc-800 flex items-center gap-3 w-max max-w-[90vw]">
+          <svg
+            className="w-5 h-5 text-yellow-400 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            ></path>
+          </svg>
+          <p className="text-xs uppercase font-bold tracking-wider">
+            {toast.message}
+          </p>
+          <button
+            onClick={() => setToast({ ...toast, visible: false })}
+            className="ml-2 text-zinc-400 hover:text-white transition-colors"
+          >
+            ✕
+          </button>
+        </div>
       </div>
     </main>
   );
