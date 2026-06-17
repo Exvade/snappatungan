@@ -24,6 +24,9 @@ export default function Home() {
   const [toast, setToast] = useState({ message: "", visible: false });
   const [qrisString, setQrisString] = useState<string | null>(null);
   const [qrisFileName, setQrisFileName] = useState<string | null>(null);
+  const [bankName, setBankName] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+  const [bankAccountName, setBankAccountName] = useState("");
   const [isEditingReceipt, setIsEditingReceipt] = useState(false);
   const [tempReceipt, setTempReceipt] = useState<ReceiptData | null>(null);
   const [assignments, setAssignments] = useState<
@@ -143,6 +146,87 @@ export default function Home() {
     const finalCrc = (crc & 0xffff).toString(16).toUpperCase().padStart(4, "0");
 
     return newQris + finalCrc;
+  };
+
+  const generateWaText = (personName: string, bill: any) => {
+    let text = `Halo *${personName}*, tagihan patungan kita totalnya *Rp ${Math.round(bill.total).toLocaleString("id-ID")}* ya!\n\n`;
+    text += `*Rincian Pesanan:*\n`;
+    bill.items.forEach((item: any) => {
+      text += `- ${item.qty}x ${item.name} (Rp ${Math.round(item.priceShare).toLocaleString("id-ID")})\n`;
+    });
+    text += `\nSubtotal: Rp ${Math.round(bill.subtotal).toLocaleString("id-ID")}\n`;
+    text += `Pajak & Layanan: Rp ${Math.round(bill.extra).toLocaleString("id-ID")}\n`;
+    text += `\nTotal Tagihan: *Rp ${Math.round(bill.total).toLocaleString("id-ID")}*`;
+    
+    if (qrisString) {
+      text += `\n\nSilakan scan QRIS pada gambar terlampir untuk membayar.`;
+    } else if (bankName && bankAccount) {
+      text += `\n\nSilakan transfer ke:\nBank: *${bankName.toUpperCase()}*\nNo. Rek: *${bankAccount}*\nA.n: *${bankAccountName.toUpperCase()}*`;
+    } else {
+      text += `\n\nSilakan transfer sesuai nominal di atas ya!`;
+    }
+    
+    return text;
+  };
+
+  const shareToWhatsApp = async (personName: string, bill: any) => {
+    const text = generateWaText(personName, bill);
+    const svgElement = document.getElementById(`qr-${personName}`);
+
+    if (svgElement && qrisString) {
+      try {
+        const clonedSvg = svgElement.cloneNode(true) as SVGElement;
+        clonedSvg.setAttribute("width", "400");
+        clonedSvg.setAttribute("height", "400");
+        const svgData = new XMLSerializer().serializeToString(clonedSvg);
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        const img = new Image();
+        
+        const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+        const url = URL.createObjectURL(svgBlob);
+        
+        await new Promise((resolve, reject) => {
+          img.onload = () => {
+            canvas.width = 440; // margin 20px
+            canvas.height = 440;
+            if (ctx) {
+              ctx.fillStyle = "#ffffff";
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 20, 20, 400, 400);
+            }
+            resolve(null);
+          };
+          img.onerror = reject;
+          img.src = url;
+        });
+        
+        URL.revokeObjectURL(url);
+        
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+        
+        if (blob) {
+          const file = new File([blob], `QRIS-${personName.replace(/\s+/g, '-')}.png`, { type: "image/png" });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              text: text,
+              files: [file]
+            });
+            return; // Berhasil share gambar
+          }
+        }
+      } catch (e) {
+        console.error("Gagal share file", e);
+      }
+      
+      // Fallback
+      showToast("Browser tidak support share gambar otomatis. Silakan screenshot QR Code.");
+    }
+    
+    // Fallback: buka wa.me text only
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, "_blank");
   };
 
   const startEditing = () => {
@@ -540,7 +624,36 @@ export default function Home() {
               </div>
               <input type="file" accept="image/*" onChange={handleQrisUpload} className="hidden" />
             </label>
-            <p className="text-[10px] text-zinc-500 mt-2">Agar teman bisa langsung scan saat bayar</p>
+            <p className="text-[10px] text-zinc-500 mt-2 mb-4">Agar teman bisa langsung scan saat bayar</p>
+            
+            <div className="pt-4 border-t border-dashed border-zinc-300">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-600 mb-2">
+                ATAU TRANSFER BANK:
+              </p>
+              <div className="flex flex-col gap-2 max-w-xs mx-auto">
+                <input 
+                  type="text" 
+                  placeholder="Nama Bank (BCA, Mandiri, dll)" 
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  className="w-full bg-white border border-zinc-300 px-2 py-2 text-xs uppercase text-center focus:border-zinc-800 outline-none transition-colors"
+                />
+                <input 
+                  type="text" 
+                  placeholder="Nomor Rekening" 
+                  value={bankAccount}
+                  onChange={(e) => setBankAccount(e.target.value)}
+                  className="w-full bg-white border border-zinc-300 px-2 py-2 text-xs text-center uppercase focus:border-zinc-800 outline-none transition-colors"
+                />
+                <input 
+                  type="text" 
+                  placeholder="Atas Nama" 
+                  value={bankAccountName}
+                  onChange={(e) => setBankAccountName(e.target.value)}
+                  className="w-full bg-white border border-zinc-300 px-2 py-2 text-xs uppercase text-center focus:border-zinc-800 outline-none transition-colors"
+                />
+              </div>
+            </div>
           </div>
         )}
 
@@ -1026,6 +1139,7 @@ export default function Home() {
                             </p>
                             <div className="p-1 border border-zinc-300">
                               <QRCode
+                                id={`qr-${person}`}
                                 value={generateDynamicQris(qrisString, Math.round(bill.total))}
                                 size={120}
                                 level="M"
@@ -1033,6 +1147,14 @@ export default function Home() {
                             </div>
                           </div>
                         )}
+
+                        <button
+                          onClick={() => shareToWhatsApp(person, bill)}
+                          className="w-full mt-4 bg-green-500 text-white font-bold py-3 text-xs uppercase shadow-[2px_2px_0px_#166534] active:shadow-none active:translate-y-[2px] transition-all flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm.029 18.88c-1.161 0-2.305-.292-3.318-.844l-3.677.964.984-3.595c-.607-1.052-.927-2.246-.926-3.468.001-3.825 3.113-6.937 6.937-6.937 3.825 0 6.938 3.112 6.938 6.937s-3.113 6.943-6.938 6.943z"></path></svg>
+                          BAGIKAN KE WA
+                        </button>
                       </div>
                     ))}
                   </div>
