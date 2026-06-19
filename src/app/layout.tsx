@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Snappatungan",
+  title: "BagiRata",
   description: "AI Split Bill Counter",
 };
 

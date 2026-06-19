@@ -602,7 +602,7 @@ export default function Home() {
         {/* HEADER / LOGO */}
         <div className="text-center space-y-1 mb-6">
           <h1 className="text-2xl font-bold tracking-widest uppercase border-b-2 border-zinc-800 inline-block pb-1">
-            SNAP_PATUNGAN
+            BagiRata
           </h1>
           <p className="text-xs text-zinc-500 uppercase tracking-widest mt-2">
             Point of Sale System
@@ -756,7 +756,7 @@ export default function Home() {
               {/* Kepala Struk */}
               <div className="text-center border-b-2 border-dashed border-zinc-300 pb-6 mb-6">
                 <h2 className="text-xl font-bold uppercase tracking-wider">
-                  RESTO SNAP
+                  RESTO BAGIRATA
                 </h2>
                 <p className="text-xs text-zinc-500 mt-1 uppercase">
                   Tgl: {new Date().toLocaleDateString("id-ID")} | Kasir: AI
